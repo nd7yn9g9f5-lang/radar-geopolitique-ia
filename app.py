@@ -10,10 +10,10 @@ from google import genai
 from fpdf import FPDF
 import re
 from datetime import datetime
+import time  # <-- NOUVEAUTÉ : L'outil pour gérer le temps
 
 # --- CONFIGURATION SÉCURITÉ & IA ---
 ssl._create_default_https_context = ssl._create_unverified_context
-# NOUVEAUTÉ : Le code va chercher la clé secrète sur le serveur !
 CLE_API = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=CLE_API)
 
@@ -99,7 +99,7 @@ with col_donnees:
         mot_cle = urllib.parse.quote(f"économie sanctions commerce {pays_choisi}")
         url_dynamique = f"https://news.google.com/rss/search?q={mot_cle}&hl=fr&gl=FR&ceid=FR:fr"
         
-        with st.spinner(f"Audit IA en cours (Traitement de {nb_articles} sources)..."):
+        with st.spinner(f"Audit IA en cours (Traitement de {nb_articles} sources avec rythme de sécurité)..."):
             try:
                 request = urllib.request.Request(url_dynamique, headers={"User-Agent": "Mozilla/5.0"})
                 with urllib.request.urlopen(request, timeout=10) as response:
@@ -138,6 +138,9 @@ with col_donnees:
                         with st.expander(f"🔴 Score: {score_actuel}/10 | {title[:50]}..."):
                             st.markdown(f"**Source :** {title}")
                             st.info(texte_ia)
+                        
+                        # NOUVEAUTÉ : On met le code en pause 4 secondes pour ne pas fâcher Google
+                        time.sleep(4)
                     
                     score_moyen = sum(scores) / len(scores) if scores else 5
                     fig_gauge = go.Figure(go.Indicator(
