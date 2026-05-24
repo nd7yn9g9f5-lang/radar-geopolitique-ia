@@ -4,8 +4,12 @@ import xml.etree.ElementTree as ET
 import ssl
 import streamlit as st
 import plotly.express as px
+import plotly.graph_objects as go
 import pandas as pd
 from google import genai
+from fpdf import FPDF
+import re
+from datetime import datetime
 
 # --- CONFIGURATION SÉCURITÉ & IA ---
 ssl._create_default_https_context = ssl._create_unverified_context
@@ -13,81 +17,88 @@ CLE_API = "AIzaSyBOf1mMO6Rps_JVfR04ADCY3lgTcZG9kgY"
 client = genai.Client(api_key=CLE_API)
 
 # --- 1. PARAMÈTRES DE LA PAGE ---
-st.set_page_config(page_title="Radar IA | Pro", page_icon="🌍", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Radar IA | Executive", page_icon="🌍", layout="wide", initial_sidebar_state="expanded")
 
-# --- 2. LE MENU LATÉRAL (SIDEBAR) ---
+# --- 2. LE MENU LATÉRAL ---
 with st.sidebar:
     st.title("⚙️ Centre de Contrôle")
     st.markdown("Paramétrez votre radar géopolitique.")
     st.markdown("---")
     
-    # La liste mondiale complète (196 zones stratégiques)
     liste_pays = [
-        "Afghanistan", "Afrique du Sud", "Albanie", "Algérie", "Allemagne", "Andorre", "Angola",
-        "Antigua-et-Barbuda", "Arabie saoudite", "Argentine", "Arménie", "Australie", "Autriche",
-        "Azerbaïdjan", "Bahamas", "Bahreïn", "Bangladesh", "Barbade", "Belgique", "Belize", "Bénin",
-        "Bhoutan", "Biélorussie", "Birmanie", "Bolivie", "Bosnie-Herzégovine", "Botswana", "Brésil",
-        "Brunei", "Bulgarie", "Burkina Faso", "Burundi", "Cambodge", "Cameroun", "Canada", "Cap-Vert",
-        "Centrafrique", "Chili", "Chine", "Chypre", "Colombie", "Comores", "Congo",
-        "République démocratique du Congo", "Corée du Nord", "Corée du Sud", "Costa Rica",
-        "Côte d'Ivoire", "Croatie", "Cuba", "Danemark", "Djibouti", "Dominique", "Égypte",
-        "Émirats arabes unis", "Équateur", "Érythrée", "Espagne", "Estonie", "Eswatini",
-        "États-Unis", "Éthiopie", "Fidji", "Finlande", "France", "Gabon", "Gambie", "Géorgie",
-        "Ghana", "Grèce", "Grenade", "Guatemala", "Guinée", "Guinée-Bissau", "Guinée équatoriale",
-        "Guyana", "Haïti", "Honduras", "Hongrie", "Îles Marshall", "Îles Salomon", "Inde",
-        "Indonésie", "Irak", "Iran", "Irlande", "Islande", "Israël", "Italie", "Jamaïque", "Japon",
-        "Jordanie", "Kazakhstan", "Kenya", "Kirghizistan", "Kiribati", "Koweït", "Laos", "Lesotho",
-        "Lettonie", "Liban", "Liberia", "Libye", "Liechtenstein", "Lituanie", "Luxembourg",
-        "Macédoine du Nord", "Madagascar", "Malaisie", "Malawi", "Maldives", "Mali", "Malte",
-        "Maroc", "Maurice", "Mauritanie", "Mexique", "Micronésie", "Moldavie", "Monaco", "Mongolie",
-        "Monténégro", "Mozambique", "Namibie", "Nauru", "Népal", "Nicaragua", "Niger", "Nigéria",
-        "Norvège", "Nouvelle-Zélande", "Oman", "Ouganda", "Ouzbékistan", "Pakistan", "Palaos",
-        "Panama", "Papouasie-Nouvelle-Guinée", "Paraguay", "Pays-Bas", "Pérou", "Philippines",
-        "Pologne", "Portugal", "Qatar", "Roumanie", "Royaume-Uni", "Russie", "Rwanda",
-        "Saint-Kitts-et-Nevis", "Saint-Marin", "Saint-Vincent-et-les-Grenadines", "Sainte-Lucie",
-        "Salvador", "Samoa", "São Tomé-et-Principe", "Sénégal", "Serbie", "Seychelles",
-        "Sierra Leone", "Singapour", "Slovaquie", "Slovénie", "Somalie", "Soudan", "Soudan du Sud",
-        "Sri Lanka", "Suède", "Suisse", "Suriname", "Syrie", "Tadjikistan", "Taïwan", "Tanzanie",
-        "Tchad", "Tchéquie", "Thaïlande", "Timor oriental", "Togo", "Tonga", "Trinité-et-Tobago",
-        "Tunisie", "Turkménistan", "Turquie", "Tuvalu", "Ukraine", "Uruguay", "Vanuatu", "Vatican",
-        "Venezuela", "Vietnam", "Yémen", "Zambie", "Zimbabwe"
+        "Afghanistan", "Afrique du Sud", "Allemagne", "Arabie saoudite", "Argentine", "Australie", 
+        "Brésil", "Canada", "Chine", "Corée du Nord", "Corée du Sud", "Égypte", "Émirats arabes unis", 
+        "Espagne", "États-Unis", "France", "Inde", "Indonésie", "Iran", "Israël", "Italie", "Japon", 
+        "Maroc", "Mexique", "Nigéria", "Royaume-Uni", "Russie", "Sénégal", "Taïwan", "Turquie", "Ukraine"
     ]
     pays_choisi = st.selectbox("Cible Stratégique :", sorted(liste_pays))
-    
     st.markdown("---")
-    lancer_analyse = st.button("🚀 DÉPLOYER L'IA", use_container_width=True, type="primary")
+    lancer_analyse = st.button("🚀 LANCER L'AUDIT IA", use_container_width=True, type="primary")
 
-# --- 3. L'INTERFACE PRINCIPALE (MAIN) ---
-st.title("Tableau de Bord Stratégique")
-st.markdown("Surveillance des flux économiques mondiaux en temps réel.")
+# --- FONCTION NETTOYAGE TEXTE POUR PDF ---
+def clean_text(text):
+    replacements = {'é': 'e', 'è': 'e', 'ê': 'e', 'à': 'a', 'â': 'a', 'ç': 'c', 'ô': 'o', 'î': 'i', 'ï': 'i', 'œ': 'oe', '€': 'EUR', '’': "'", '«': '"', '»': '"'}
+    for k, v in replacements.items():
+        text = text.replace(k, v)
+    return text
 
-col_kpi1, col_kpi2, col_kpi3 = st.columns(3)
-col_kpi1.metric(label="Statut du Radar", value="En ligne", delta="Sécurisé")
-col_kpi2.metric(label="Zone Ciblée", value=pays_choisi)
-col_kpi3.metric(label="Moteur Analytique", value="Gemini 2.5", delta="Ultra-rapide")
+# --- FONCTION CRÉATION PDF ---
+def generer_pdf(pays, score_moyen, analyses):
+    pdf = FPDF()
+    pdf.add_page()
+    
+    # En-tête
+    pdf.set_font("Arial", 'B', 16)
+    pdf.set_text_color(0, 51, 102)
+    pdf.cell(200, 10, txt=f"RAPPORT D'AUDIT GEOPOLITIQUE : {pays.upper()}", ln=True, align='C')
+    pdf.set_font("Arial", 'I', 10)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(200, 10, txt=f"Genere le {datetime.now().strftime('%d/%m/%Y')} par l'IA Gemini", ln=True, align='C')
+    pdf.ln(5)
+    
+    # Score de Risque
+    pdf.set_font("Arial", 'B', 14)
+    if score_moyen >= 7:
+        pdf.set_text_color(200, 0, 0)
+    elif score_moyen >= 4:
+        pdf.set_text_color(255, 140, 0)
+    else:
+        pdf.set_text_color(0, 150, 0)
+    pdf.cell(200, 10, txt=f"INDICE DE RISQUE GLOBAL : {score_moyen:.1f} / 10", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Analyses
+    pdf.set_text_color(0, 0, 0)
+    for idx, (titre, contenu) in enumerate(analyses):
+        pdf.set_font("Arial", 'B', 11)
+        pdf.multi_cell(0, 8, txt=f"Alerte #{idx+1} : {clean_text(titre)}")
+        pdf.set_font("Arial", '', 10)
+        pdf.multi_cell(0, 6, txt=clean_text(contenu))
+        pdf.ln(5)
+        
+    return pdf.output(dest='S').encode('latin-1', 'replace')
 
-st.markdown("---")
+# --- 3. L'INTERFACE PRINCIPALE ---
+st.title("Tableau de Bord Executive")
+st.markdown("Surveillance des flux commerciaux, conformité et sanctions en temps réel.")
 
-col_carte, col_donnees = st.columns([1.5, 1])
+col_carte, col_donnees = st.columns([1.2, 1.8])
 
 with col_carte:
+    st.subheader("Cartographie")
     df = pd.DataFrame({"Pays": liste_pays})
-    fig = px.choropleth(df, locations="Pays", locationmode="country names", color_discrete_sequence=['#4F8BF9'], projection="orthographic")
-    fig.update_layout(
-        margin={"r":0,"t":0,"l":0,"b":0}, 
-        geo=dict(showcoastlines=True, coastlinecolor="rgba(255,255,255,0.2)", projection_type='orthographic', bgcolor='rgba(0,0,0,0)'),
-        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)"
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    fig_map = px.choropleth(df, locations="Pays", locationmode="country names", color_discrete_sequence=['#1f77b4'], projection="orthographic")
+    fig_map.update_layout(margin={"r":0,"t":0,"l":0,"b":0}, geo=dict(showcoastlines=True, projection_type='orthographic', bgcolor='rgba(0,0,0,0)'), paper_bgcolor="rgba(0,0,0,0)")
+    st.plotly_chart(fig_map, use_container_width=True)
 
 with col_donnees:
-    st.subheader("Signaux Faibles & Alertes")
+    st.subheader("Matrice d'Analyse IA")
     
     if lancer_analyse:
-        mot_cle = urllib.parse.quote(f"géopolitique économie {pays_choisi}")
+        mot_cle = urllib.parse.quote(f"économie sanctions commerce {pays_choisi}")
         url_dynamique = f"https://news.google.com/rss/search?q={mot_cle}&hl=fr&gl=FR&ceid=FR:fr"
         
-        with st.spinner(f"Acquisition des données pour {pays_choisi}..."):
+        with st.spinner("Audit IA en cours (Conformité, Supply Chain, Finance)..."):
             try:
                 request = urllib.request.Request(url_dynamique, headers={"User-Agent": "Mozilla/5.0"})
                 with urllib.request.urlopen(request, timeout=10) as response:
@@ -97,23 +108,73 @@ with col_donnees:
                 items = root.findall('.//item')[:3]
                 
                 if not items:
-                    st.warning(f"Aucune actualité géopolitique économique majeure détectée pour {pays_choisi} aujourd'hui.")
+                    st.warning("Aucune donnée stratégique détectée aujourd'hui.")
                 else:
-                    st.success("✅ Données traitées avec succès.")
+                    scores = []
+                    analyses_sauvegardees = []
+                    
+                    # Conteneurs pour l'affichage
+                    zone_jauge = st.empty()
                     
                     for item in items:
                         title = item.findtext('title')
-                        titre_court = title[:60] + "..." if len(title) > 60 else title
                         
-                        with st.expander(f"📰 {titre_court}"):
-                            st.markdown(f"**Source originale :** {title}")
-                            
-                            prompt = f"Tu es analyste en risque géopolitique. Résume l'impact direct de cette annonce concernant {pays_choisi} sur le commerce international et les entreprises en 2 phrases claires : {title}"
-                            reponse = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
-                            
-                            st.info(f"**Synthèse IA :**\n\n{reponse.text}")
+                        # Prompt structuré de niveau Expert
+                        prompt = f"""Tu es un expert en sanctions internationales et commerce. Analyse cette actualité pour {pays_choisi} : "{title}". 
+                        Réponds STRICTEMENT avec cette structure :
+                        SCORE: [donne une note de risque de 1 à 10]
+                        SANCTIONS: [Impact sur la conformité en 1 phrase]
+                        SUPPLY CHAIN: [Impact logistique en 1 phrase]
+                        FINANCE: [Impact financier en 1 phrase]"""
+                        
+                        reponse = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
+                        texte_ia = reponse.text
+                        
+                        # Extraction du score mathématique
+                        match = re.search(r'SCORE:\s*(\d+)', texte_ia.upper())
+                        score_actuel = int(match.group(1)) if match else 5
+                        scores.append(score_actuel)
+                        
+                        # Sauvegarde pour le PDF
+                        analyses_sauvegardees.append((title, texte_ia))
+                        
+                        # Affichage des tiroirs
+                        with st.expander(f"🔴 Score: {score_actuel}/10 | {title[:50]}..."):
+                            st.markdown(f"**Source :** {title}")
+                            st.info(texte_ia)
+                    
+                    # Affichage de la Jauge de Risque Moyenne
+                    score_moyen = sum(scores) / len(scores) if scores else 5
+                    fig_gauge = go.Figure(go.Indicator(
+                        mode = "gauge+number",
+                        value = score_moyen,
+                        domain = {'x': [0, 1], 'y': [0, 1]},
+                        title = {'text': "Indice de Risque Global", 'font': {'size': 24}},
+                        gauge = {
+                            'axis': {'range': [0, 10]},
+                            'bar': {'color': "darkblue"},
+                            'steps': [
+                                {'range': [0, 3], 'color': "lightgreen"},
+                                {'range': [3, 7], 'color': "gold"},
+                                {'range': [7, 10], 'color': "salmon"}
+                            ]}
+                    ))
+                    fig_gauge.update_layout(height=250, margin=dict(l=10, r=10, t=40, b=10))
+                    zone_jauge.plotly_chart(fig_gauge, use_container_width=True)
+                    
+                    # Génération du bouton PDF
+                    st.success("✅ Audit terminé. Rapport prêt pour l'export.")
+                    pdf_bytes = generer_pdf(pays_choisi, score_moyen, analyses_sauvegardees)
+                    st.download_button(
+                        label="📄 TÉLÉCHARGER LE RAPPORT EXECUTIVE (PDF)",
+                        data=pdf_bytes,
+                        file_name=f"Audit_Geopolitique_{pays_choisi}.pdf",
+                        mime="application/pdf",
+                        type="primary",
+                        use_container_width=True
+                    )
                         
             except Exception as e:
-                st.error(f"Erreur de flux : {e}")
+                st.error(f"Erreur du radar : {e}")
     else:
-        st.info("👈 Sélectionnez un pays dans le menu latéral et cliquez sur 'Déployer l'IA' pour lancer le scan.")
+        st.info("👈 Lancez l'audit pour générer les graphiques et le rapport PDF.")
