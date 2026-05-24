@@ -13,7 +13,8 @@ from datetime import datetime
 
 # --- CONFIGURATION SÉCURITÉ & IA ---
 ssl._create_default_https_context = ssl._create_unverified_context
-CLE_API = "AIzaSyBOf1mMO6Rps_JVfR04ADCY3lgTcZG9kgY"
+# NOUVEAUTÉ : Le code va chercher la clé secrète sur le serveur !
+CLE_API = st.secrets["GEMINI_API_KEY"]
 client = genai.Client(api_key=CLE_API)
 
 # --- 1. PARAMÈTRES DE LA PAGE ---
@@ -33,7 +34,6 @@ with st.sidebar:
     ]
     pays_choisi = st.selectbox("Cible Stratégique :", sorted(liste_pays))
     
-    # NOUVEAUTÉ : Le curseur de profondeur
     nb_articles = st.slider("Profondeur de l'audit (Volume de sources) :", min_value=3, max_value=15, value=5)
     
     st.markdown("---")
@@ -51,7 +51,6 @@ def generer_pdf(pays, score_moyen, analyses):
     pdf = FPDF()
     pdf.add_page()
     
-    # En-tête
     pdf.set_font("Arial", 'B', 16)
     pdf.set_text_color(0, 51, 102)
     pdf.cell(200, 10, txt=f"RAPPORT D'AUDIT GEOPOLITIQUE : {pays.upper()}", ln=True, align='C')
@@ -60,7 +59,6 @@ def generer_pdf(pays, score_moyen, analyses):
     pdf.cell(200, 10, txt=f"Genere le {datetime.now().strftime('%d/%m/%Y')} par l'IA Gemini", ln=True, align='C')
     pdf.ln(5)
     
-    # Score de Risque
     pdf.set_font("Arial", 'B', 14)
     if score_moyen >= 7:
         pdf.set_text_color(200, 0, 0)
@@ -71,7 +69,6 @@ def generer_pdf(pays, score_moyen, analyses):
     pdf.cell(200, 10, txt=f"INDICE DE RISQUE GLOBAL : {score_moyen:.1f} / 10", ln=True, align='C')
     pdf.ln(10)
     
-    # Analyses
     pdf.set_text_color(0, 0, 0)
     for idx, (titre, contenu) in enumerate(analyses):
         pdf.set_font("Arial", 'B', 11)
@@ -109,7 +106,6 @@ with col_donnees:
                     data = response.read()
                 
                 root = ET.fromstring(data)
-                # NOUVEAUTÉ : On récupère le nombre d'articles choisi par l'utilisateur
                 items = root.findall('.//item')[:nb_articles]
                 
                 if not items:
