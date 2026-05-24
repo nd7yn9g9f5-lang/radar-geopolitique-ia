@@ -32,6 +32,10 @@ with st.sidebar:
         "Maroc", "Mexique", "Nigéria", "Royaume-Uni", "Russie", "Sénégal", "Taïwan", "Turquie", "Ukraine"
     ]
     pays_choisi = st.selectbox("Cible Stratégique :", sorted(liste_pays))
+    
+    # NOUVEAUTÉ : Le curseur de profondeur
+    nb_articles = st.slider("Profondeur de l'audit (Volume de sources) :", min_value=3, max_value=15, value=5)
+    
     st.markdown("---")
     lancer_analyse = st.button("🚀 LANCER L'AUDIT IA", use_container_width=True, type="primary")
 
@@ -98,14 +102,15 @@ with col_donnees:
         mot_cle = urllib.parse.quote(f"économie sanctions commerce {pays_choisi}")
         url_dynamique = f"https://news.google.com/rss/search?q={mot_cle}&hl=fr&gl=FR&ceid=FR:fr"
         
-        with st.spinner("Audit IA en cours (Conformité, Supply Chain, Finance)..."):
+        with st.spinner(f"Audit IA en cours (Traitement de {nb_articles} sources)..."):
             try:
                 request = urllib.request.Request(url_dynamique, headers={"User-Agent": "Mozilla/5.0"})
                 with urllib.request.urlopen(request, timeout=10) as response:
                     data = response.read()
                 
                 root = ET.fromstring(data)
-                items = root.findall('.//item')[:3]
+                # NOUVEAUTÉ : On récupère le nombre d'articles choisi par l'utilisateur
+                items = root.findall('.//item')[:nb_articles]
                 
                 if not items:
                     st.warning("Aucune donnée stratégique détectée aujourd'hui.")
@@ -113,13 +118,11 @@ with col_donnees:
                     scores = []
                     analyses_sauvegardees = []
                     
-                    # Conteneurs pour l'affichage
                     zone_jauge = st.empty()
                     
                     for item in items:
                         title = item.findtext('title')
                         
-                        # Prompt structuré de niveau Expert
                         prompt = f"""Tu es un expert en sanctions internationales et commerce. Analyse cette actualité pour {pays_choisi} : "{title}". 
                         Réponds STRICTEMENT avec cette structure :
                         SCORE: [donne une note de risque de 1 à 10]
@@ -130,26 +133,22 @@ with col_donnees:
                         reponse = client.models.generate_content(model='gemini-2.5-flash', contents=prompt)
                         texte_ia = reponse.text
                         
-                        # Extraction du score mathématique
                         match = re.search(r'SCORE:\s*(\d+)', texte_ia.upper())
                         score_actuel = int(match.group(1)) if match else 5
                         scores.append(score_actuel)
                         
-                        # Sauvegarde pour le PDF
                         analyses_sauvegardees.append((title, texte_ia))
                         
-                        # Affichage des tiroirs
                         with st.expander(f"🔴 Score: {score_actuel}/10 | {title[:50]}..."):
                             st.markdown(f"**Source :** {title}")
                             st.info(texte_ia)
                     
-                    # Affichage de la Jauge de Risque Moyenne
                     score_moyen = sum(scores) / len(scores) if scores else 5
                     fig_gauge = go.Figure(go.Indicator(
                         mode = "gauge+number",
                         value = score_moyen,
                         domain = {'x': [0, 1], 'y': [0, 1]},
-                        title = {'text': "Indice de Risque Global", 'font': {'size': 24}},
+                        title = {'text': f"Indice de Risque Global ({len(scores)} sources)", 'font': {'size': 24}},
                         gauge = {
                             'axis': {'range': [0, 10]},
                             'bar': {'color': "darkblue"},
@@ -162,7 +161,6 @@ with col_donnees:
                     fig_gauge.update_layout(height=250, margin=dict(l=10, r=10, t=40, b=10))
                     zone_jauge.plotly_chart(fig_gauge, use_container_width=True)
                     
-                    # Génération du bouton PDF
                     st.success("✅ Audit terminé. Rapport prêt pour l'export.")
                     pdf_bytes = generer_pdf(pays_choisi, score_moyen, analyses_sauvegardees)
                     st.download_button(
